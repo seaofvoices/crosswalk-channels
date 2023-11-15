@@ -1,0 +1,24 @@
+{
+  "name": "crosswalk-channels",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/seaofvoices/crosswalk-channels.git"
+  },
+  "license": "MIT",
+  "main": "src/Channels.lua",
+  "scripts": {
+    "prepare": "npmluau",
+    "build-all": "sh ./scripts/build.sh",
+    "lint": "sh ./scripts/analyze.sh",
+    "format": "stylua .",
+    "style-check": "stylua . --check",
+    "clean": "rm -rf roblox node_modules build"
+  },
+  "dependencies": {
+    "luau-teardown": "^0.1.1"
+  },
+  "devDependencies": {
+    "npmluau": "^0.1.0"
+  }
+}

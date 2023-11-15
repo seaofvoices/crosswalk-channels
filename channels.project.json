@@ -1,0 +1,12 @@
+{
+  "name": "Channels",
+  "tree": {
+    "$path": "./src/Channels.lua",
+    "Impl": {
+      "$path": "./src/impl",
+      "__modules__": {
+        "$path": "./node_modules"
+      }
+    }
+  }
+}
