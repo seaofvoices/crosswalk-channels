@@ -121,7 +121,9 @@ jobs:
           cache-dependency-path: "yarn.lock"
 
       - name: Install packages
-        run: yarn install --immutable
+        run: |
+          yarn install --immutable
+          yarn prepare
 
       - name: Build assets
         run: yarn run build-all
