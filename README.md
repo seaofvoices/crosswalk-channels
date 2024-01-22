@@ -60,16 +60,41 @@ Publish values on a channel **for a single player**.
 Channels.SendLocal(player: Player, channelName: string, value: unknown)
 ```
 
+### Bind
+
+Listen for changes on a channel (using `Channels.Send`).
+
+```lua
+Bind<T>(channelName: string, func: (T) -> ()): () -> ()
+```
+
+- Listen to data sent on global signals (sent to all players with `Send`).
+- The returned function disconnects from the channel
+
+### BindPlayer
+
+Listen for changes on a local channel (using `Channels.SendLocal`).
+
+```lua
+BindPlayer<T>(channelName: string, func: (Player, T) -> ()): () -> ()
+```
+
+- Listen to data sent on local signals (sent to individual players with `SendLocal`).
+- The returned function disconnects from the channel
+
+
 ## Client API
 
 ### Bind
+
+Listen for changes on a channel.
 
 ```lua
 Bind<T>(channelName: string, func: (T) -> ()): () -> ()
 ```
 
 - Each client can connect to values that are sent to its own player or to all players.
-- A function will be returned by the `Bind` call to disconnect
+- The returned function disconnects from the channel
 
 ```lua
 local disconnect = Channels.Bind("timer", function(newValue)
