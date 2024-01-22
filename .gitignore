@@ -10,6 +10,8 @@
 /roblox
 /node_modules
 
+.yarn
+
 build/
 test-places/
 

@@ -16,9 +16,11 @@
     "clean": "rm -rf roblox node_modules build"
   },
   "dependencies": {
-    "luau-teardown": "^0.1.1"
+    "luau-signal": "^0.1.0",
+    "luau-teardown": "^0.1.3"
   },
   "devDependencies": {
-    "npmluau": "^0.1.0"
-  }
+    "npmluau": "^0.1.1"
+  },
+  "packageManager": "yarn@4.0.2"
 }
