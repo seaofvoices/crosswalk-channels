@@ -46,6 +46,7 @@ return function(_SharedModules, Services, isServer)
                 signal:fire(player, value)
             end
         end
+        module.sendLocal = module.SendLocal
 
         function module.BindPlayer<T>(name: string, fn: (Player, T) -> ()): () -> ()
             if _G.DEV then
@@ -67,6 +68,7 @@ return function(_SharedModules, Services, isServer)
             end
             return signal:connect(fn):disconnectFn()
         end
+        module.bindPlayer = module.BindPlayer
 
         function module.Send(name: string, value: unknown)
             if _G.DEV then
@@ -103,6 +105,7 @@ return function(_SharedModules, Services, isServer)
             end
             return signal:connect(fn):disconnectFn()
         end
+        module.bind = module.Bind
     else
         local ClientReplication = require('./impl/ClientReplication')
 
@@ -124,6 +127,7 @@ return function(_SharedModules, Services, isServer)
             end
             return clientReplication:bind(name, fn)
         end
+        module.bind = module.Bind
     end
 
     return module
