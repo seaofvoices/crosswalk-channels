@@ -2,7 +2,7 @@
 
 ## Unreleased Changes
 
-- improve error message when `sendLocal` fails (when `DEV = true`)  ([#7](https://github.com/seaofvoices/crosswalk-channels/pull/7))
+- improve error message when `sendLocal` fails (when `DEV = true`) ([#7](https://github.com/seaofvoices/crosswalk-channels/pull/7))
 
 ## 0.1.1
 
