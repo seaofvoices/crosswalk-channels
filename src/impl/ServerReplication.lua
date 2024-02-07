@@ -92,7 +92,14 @@ function ServerReplication:sendLocal(player: Player, name: string, value: unknow
         if playerSetup ~= nil then
             local counterValue = self:_incrementPlayerCounter(player, name)
 
-            writeValue(playerSetup.values, name, value)
+            if _G.DEV then
+                local success, err: any = pcall(writeValue, playerSetup.values, name, value)
+                if not success then
+                    error(`unable to send value on local channel '{name}': {err}`)
+                end
+            else
+                writeValue(playerSetup.values, name, value)
+            end
             writeValue(playerSetup.counters, name, counterValue)
         end
     end)
