@@ -17,7 +17,7 @@ end
 
 local function writeFolder(name: string, parent: Instance)
     local child = parent:FindFirstChild(name)
-    if child and not child:IsA('Folder') then
+    if child and child.ClassName ~= 'Folder' then
         child:Destroy()
         child = nil
     end
@@ -53,16 +53,31 @@ local function writeValue(folder: Folder, name: string, value: unknown)
             local attributeHolder: Instance
             if currentChild == nil then
                 attributeHolder = createFolder(name, folder)
+            elseif currentChild.ClassName == 'Folder' then
+                attributeHolder = currentChild
             else
-                if currentChild:IsA('Folder') then
-                    attributeHolder = currentChild
-                else
-                    currentChild:Destroy()
-                    attributeHolder = createFolder(name, folder)
-                end
+                currentChild:Destroy()
+                attributeHolder = createFolder(name, folder)
             end
             attributeHolder:AddTag(Constants.ValueAttribute)
             attributeHolder:SetAttribute(Constants.ValueAttribute, value)
+        end
+    elseif valueType == 'Instance' then
+        local currentChild = folder:FindFirstChild(name)
+
+        if currentChild == nil then
+            local objectValue = Instance.new('ObjectValue')
+            objectValue.Name = name
+            objectValue.Value = value :: Instance
+            objectValue.Parent = folder
+        elseif currentChild.ClassName == 'ObjectValue' then
+            (currentChild :: ObjectValue).Value = value :: Instance
+        else
+            currentChild:Destroy()
+            local objectValue = Instance.new('ObjectValue')
+            objectValue.Name = name
+            objectValue.Value = value :: Instance
+            objectValue.Parent = folder
         end
     elseif valueType == 'table' then
         folder:SetAttribute(name, nil)

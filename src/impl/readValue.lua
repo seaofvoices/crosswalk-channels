@@ -5,7 +5,7 @@ local readValue
 local function readInstance(instance: Instance): any
     if instance:IsA('ValueBase') then
         return (instance :: any).Value
-    elseif instance:IsA('Folder') then
+    elseif instance.ClassName == 'Folder' then
         if instance:HasTag(Constants.ListTag) then
             local length = instance:GetAttribute(Constants.ListLengthAttribute) or 0
             local list = table.create(length, 0)
