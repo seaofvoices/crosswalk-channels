@@ -63,6 +63,7 @@ local function writeValue(folder: Folder, name: string, value: unknown)
             attributeHolder:SetAttribute(Constants.ValueAttribute, value)
         end
     elseif valueType == 'Instance' then
+        folder:SetAttribute(name, nil)
         local currentChild = folder:FindFirstChild(name)
 
         if currentChild == nil then
