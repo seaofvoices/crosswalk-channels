@@ -2,6 +2,8 @@
 
 ## Unreleased Changes
 
+## 0.1.2
+
 - add support for Instance values ([#8](https://github.com/seaofvoices/crosswalk-channels/pull/8))
 - improve error message when `sendLocal` fails (when `DEV = true`) ([#7](https://github.com/seaofvoices/crosswalk-channels/pull/7))
 
