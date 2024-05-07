@@ -86,7 +86,6 @@ local function writeValue(folder: Folder, name: string, value: unknown)
         if isEmpty(value :: any) then
             clearAttributes(valueFolder)
             valueFolder:ClearAllChildren()
-            valueFolder:RemoveTag(Constants.ListTag)
             valueFolder:SetAttribute(Constants.ListLengthAttribute, nil)
             valueFolder:RemoveTag(Constants.ValueAttribute)
             valueFolder:SetAttribute(Constants.ValueAttribute, nil)
@@ -97,8 +96,6 @@ local function writeValue(folder: Folder, name: string, value: unknown)
             valueFolder:SetAttribute(Constants.ValueAttribute, nil)
 
             local previousLength = valueFolder:GetAttribute(Constants.ListLengthAttribute)
-
-            valueFolder:AddTag(Constants.ListTag)
 
             local currentLength = #array
 
@@ -125,7 +122,6 @@ local function writeValue(folder: Folder, name: string, value: unknown)
         else
             valueFolder:RemoveTag(Constants.ValueAttribute)
             valueFolder:SetAttribute(Constants.ValueAttribute, nil)
-            valueFolder:RemoveTag(Constants.ListTag)
             valueFolder:SetAttribute(Constants.ListLengthAttribute, nil)
 
             local dictionary = value :: { [any]: unknown }
