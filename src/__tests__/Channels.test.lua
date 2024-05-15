@@ -100,7 +100,9 @@ local valueCases: { [string]: any } = {
 for caseName, value in valueCases do
     for _, bindFromServer in { false, true } do
         describe(
-            `sending '{caseName}' and receiving on the {if bindFromServer then 'server' else 'client'}`,
+            `sending '{caseName}' and receiving on the {if bindFromServer
+                then 'server'
+                else 'client'}`,
             function()
                 local teardown: () -> ()? = nil
                 local services
