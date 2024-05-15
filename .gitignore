@@ -1,4 +1,5 @@
 /site
+
 /*.rbxl
 /*.rbxlx
 /*.rbxl.lock
@@ -6,13 +7,11 @@
 /*.rbxm
 /*.rbxmx
 
-/roblox
+/temp
 /node_modules
+/build
 
 .yarn
-
-build/
-test-places/
 
 /globalTypes.d.lua
 
