@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "The version to release starting with `v`"
+        description: The version to release starting with `v`
         required: true
         type: string
 
       release_ref:
-        description: "The branch, tag or SHA to checkout (default to latest)"
+        description: The branch, tag or SHA to checkout (default to latest)
         default: ""
         type: string
 
@@ -29,17 +29,19 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: "latest"
-          cache: "yarn"
-          cache-dependency-path: "yarn.lock"
+          node-version: latest
+          registry-url: https://registry.npmjs.org
+          cache: yarn
+          cache-dependency-path: yarn.lock
 
       - name: Install packages
-        run: |
-          yarn install --immutable
-          yarn prepare
+        run: yarn install --immutable
+
+      - name: Run npmluau
+        run: yarn run prepare
 
       - name: Authenticate yarn
-        run: |
+        run: |-
           yarn config set npmAlwaysAuth true
           yarn config set npmAuthToken $NPM_AUTH_TOKEN
         env:
@@ -58,7 +60,7 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Create tag
         run: |
@@ -88,6 +90,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - artifact-name: channels.lua
+            path: build/channels.lua
+            asset-type: text/plain
+
+          - artifact-name: channels-dev.lua
+            path: build/debug/channels.lua
+            asset-type: text/plain
+
           - artifact-name: channels.rbxm
             path: build/channels.rbxm
             asset-type: application/octet-stream
@@ -95,14 +105,6 @@ jobs:
           - artifact-name: channels-dev.rbxm
             path: build/debug/channels.rbxm
             asset-type: application/octet-stream
-
-          - artifact-name: channels-bundled.lua
-            path: build/channels.lua
-            asset-type: text/plain
-
-          - artifact-name: channels-bundled-dev.lua
-            path: build/debug/channels.lua
-            asset-type: text/plain
 
     steps:
       - uses: actions/checkout@v4
@@ -116,17 +118,19 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: "latest"
-          cache: "yarn"
-          cache-dependency-path: "yarn.lock"
+          node-version: latest
+          registry-url: https://registry.npmjs.org
+          cache: yarn
+          cache-dependency-path: yarn.lock
 
       - name: Install packages
-        run: |
-          yarn install --immutable
-          yarn prepare
+        run: yarn install --immutable
+
+      - name: Run npmluau
+        run: yarn run prepare
 
       - name: Build assets
-        run: yarn run build-all
+        run: yarn run build
 
       - name: Upload asset
         uses: actions/upload-artifact@v3

@@ -7,8 +7,10 @@
       }
     }
   },
-  "process": [
+  "rules": [
     "remove_types",
+    "remove_comments",
+    "remove_spaces",
     {
       "rule": "inject_global_value",
       "identifier": "LUA_ENV",
@@ -17,6 +19,11 @@
     {
       "rule": "inject_global_value",
       "identifier": "DEV",
+      "value": true
+    },
+    {
+      "rule": "inject_global_value",
+      "identifier": "__DEV__",
       "value": true
     },
     "compute_expression",

@@ -1,5 +1,7 @@
 {
-  "process": [
+  "rules": [
+    "remove_comments",
+    "remove_spaces",
     {
       "rule": "convert_require",
       "current": {
@@ -10,7 +12,7 @@
       },
       "target": {
         "name": "roblox",
-        "rojo_sourcemap": "./sourcemap.json",
+        "rojo_sourcemap": "sourcemap.json",
         "indexing_style": "wait_for_child"
       }
     },
@@ -22,6 +24,11 @@
     {
       "rule": "inject_global_value",
       "identifier": "DEV",
+      "value": true
+    },
+    {
+      "rule": "inject_global_value",
+      "identifier": "__DEV__",
       "value": true
     },
     "compute_expression",

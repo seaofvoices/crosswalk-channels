@@ -7,9 +7,19 @@ BUILD_OUTPUT=$2
 
 if [ ! -d node_modules ]; then
     yarn install
-    yarn prepare
+fi
+if [ ! -d node_modules/.luau-aliases ]; then
+    yarn run prepare
 fi
 
-mkdir -p $BUILD_OUTPUT
+rm -rf temp
+mkdir -p temp
+cp -r src/ temp/
+cp -rL node_modules/ temp/
 
-darklua process --config $DARKLUA_CONFIG src/Channels.lua $BUILD_OUTPUT/channels.lua
+./scripts/remove-tests.sh temp
+
+rm -f "$BUILD_OUTPUT"
+mkdir -p $(dirname "$BUILD_OUTPUT")
+
+darklua process --config "$DARKLUA_CONFIG" temp/src/init.lua "$BUILD_OUTPUT"
