@@ -2,6 +2,8 @@
 
 ## Unreleased Changes
 
+- fix data sync issues with arrays ([#11](https://github.com/seaofvoices/crosswalk-channels/pull/11))
+
 ## 0.1.2
 
 - add support for Instance values ([#8](https://github.com/seaofvoices/crosswalk-channels/pull/8))

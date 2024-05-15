@@ -16,10 +16,7 @@ rojo sourcemap channels.project.json -o sourcemap.json
 
 rm -rf $CODE_OUTPUT/src
 darklua process --config $DARKLUA_CONFIG src $CODE_OUTPUT/src
-
-if [ ! -d $CODE_OUTPUT/node_modules ]; then
-    darklua process --config $DARKLUA_CONFIG node_modules $CODE_OUTPUT/node_modules
-fi
+darklua process --config $DARKLUA_CONFIG node_modules $CODE_OUTPUT/node_modules
 
 cp -r channels.project.json $CODE_OUTPUT/
 
