@@ -1,6 +1,6 @@
 {
   "name": "crosswalk-channels",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A crosswalk shared module to send data to clients",
   "license": "MIT",
   "author": "jeparlefrancais <jeparlefrancais21@gmail.com>",
