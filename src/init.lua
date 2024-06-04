@@ -1,6 +1,12 @@
 return function(_SharedModules, Services, isServer)
     local module = {}
 
+    type Configuration = {
+        race: boolean?,
+        syncInterval: number?,
+        timeFn: (() -> number)?,
+    }
+
     if isServer then
         local ServerReplication = require('./impl/ServerReplication')
         local Signal = require('@pkg/luau-signal')
@@ -16,8 +22,22 @@ return function(_SharedModules, Services, isServer)
         local lastLocalValues: { [Player]: { [string]: { value: any } } } = {}
         setmetatable(lastLocalValues :: any, { __mode = 'k' })
 
-        function module.Init()
+        function module.configure(config: Configuration)
+            serverReplication = ServerReplication.new(config)
+        end
+
+        function module.Start()
             serverReplication:setup(Services.ReplicatedStorage)
+
+            local players: Players = Services.Players
+
+            players.PlayerAdded:Connect(function(player: Player)
+                serverReplication:registerPlayer(player)
+            end)
+
+            players.PlayerRemoving:Connect(function(player: Player)
+                serverReplication:unregisterPlayer(player)
+            end)
         end
 
         function module.SendLocal(player: Player, name: string, value: unknown)
@@ -111,7 +131,11 @@ return function(_SharedModules, Services, isServer)
 
         local clientReplication = ClientReplication.new()
 
-        function module.Init()
+        function module.configure(config: Configuration)
+            clientReplication = ClientReplication.new(config)
+        end
+
+        function module.Start()
             task.spawn(function()
                 clientReplication:setup(Services.ReplicatedStorage, Services.Players.LocalPlayer)
             end)

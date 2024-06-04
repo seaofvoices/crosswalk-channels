@@ -1,11 +1,11 @@
-local Constants = require('./Constants')
+local Signal = require('@pkg/luau-signal')
 local Teardown = require('@pkg/luau-teardown')
-local readValue = require('./readValue')
-local waitForeverForChild = require('./waitForeverForChild')
 
--- todo: once darklua can properly re-rexport the teardown type
--- replace `any` with `Teardown.Teardown`
-type Teardown = any
+local Constants = require('./Constants')
+
+type Signal<T...> = Signal.Signal<T...>
+type Teardown = Teardown.Teardown
+
 type Fn<T> = (T) -> ()
 
 export type ClientReplication = {
@@ -14,14 +14,20 @@ export type ClientReplication = {
 }
 
 type Private = {
-    _connections: { [string]: { Fn<any> } },
-    _localContainer: Instance?,
-    _localCounterContainer: Instance?,
-    _globalContainer: Instance?,
-    _globalCounterContainer: Instance?,
+    _race: boolean,
+    _channelSignals: { [string]: Signal<unknown> },
+    _lastTimeStamps: { [string]: number },
+    _lastData: { [string]: unknown },
 }
+
+export type ClientReplicationOptions = {
+    race: boolean?,
+}
+
+local DEFAULT_RACE_OPTIONS = false
+
 type ClientReplicationStatic = ClientReplication & Private & {
-    new: () -> ClientReplication,
+    new: (options: ClientReplicationOptions?) -> ClientReplication,
 }
 
 local ClientReplication: ClientReplicationStatic = {} :: any
@@ -29,13 +35,14 @@ local ClientReplicationMetatable = {
     __index = ClientReplication,
 }
 
-function ClientReplication.new(): ClientReplication
+function ClientReplication.new(options: ClientReplicationOptions?): ClientReplication
+    local options: ClientReplicationOptions = if options == nil then {} else options
+
     local self: Private = {
-        _connections = {},
-        _localContainer = nil,
-        _localCounterContainer = nil,
-        _globalContainer = nil,
-        _globalCounterContainer = nil,
+        _race = if options.race == nil then DEFAULT_RACE_OPTIONS else options.race,
+        _channelSignals = {},
+        _lastTimeStamps = {},
+        _lastData = {},
     }
 
     return setmetatable(self, ClientReplicationMetatable) :: any
@@ -44,112 +51,50 @@ end
 function ClientReplication:setup(parent: Instance, player: Player): Teardown
     local self: Private & ClientReplication = self :: any
 
-    local globalContainer = parent:WaitForChild(Constants.GlobalContainerName) :: any
-    local globalCounterContainer = parent:WaitForChild(Constants.CounterContainerName) :: any
-
-    self._globalContainer = globalContainer
-    self._globalCounterContainer = globalCounterContainer
-
-    local function fireFns(container: Instance, name: string, fns: { Fn<any> })
-        local currentValue = readValue(container, name)
-
-        for _, fn in fns do
-            task.spawn(fn, currentValue)
-        end
-    end
-
-    local function updateValue(container: Instance, name: string)
-        local fns = self._connections[name]
-        if fns == nil or #fns == 0 then
+    local function receiveData(timeStamp: number, channelName: string, data: unknown)
+        if timeStamp <= (self._lastTimeStamps[channelName] or 0) then
             return
         end
 
-        task.defer(fireFns, container, name, fns)
+        self._lastTimeStamps[channelName] = timeStamp
+        self._lastData[channelName] = data
+
+        local signal = self._channelSignals[channelName]
+
+        if signal ~= nil then
+            signal:fire(data)
+        end
     end
 
-    local localConnection = nil
-    local disconnected = false
-
-    task.spawn(function()
-        local playerGui = waitForeverForChild(player, 'PlayerGui')
-        local localContainer = waitForeverForChild(playerGui, Constants.LocalPlayerContainerName)
-        local localCounterContainer = waitForeverForChild(playerGui, Constants.CounterContainerName)
-
-        if disconnected then
-            return
-        end
-
-        self._localContainer = localContainer
-        self._localCounterContainer = localCounterContainer
-
-        localConnection = localCounterContainer.AttributeChanged:Connect(
-            function(attributeName: string)
-                updateValue(localContainer, attributeName)
-            end
-        )
-
-        for attributeName in localCounterContainer:GetAttributes() do
-            updateValue(localContainer, attributeName)
-        end
-    end)
+    local unreliableRemote = parent:WaitForChild(Constants.FastEventName) :: UnreliableRemoteEvent
+    local reliableRemote = parent:WaitForChild(Constants.EventName) :: RemoteEvent
 
     return Teardown.join(
-        globalCounterContainer.AttributeChanged:Connect(function(attributeName: string)
-            updateValue(globalContainer, attributeName)
-        end),
-        function()
-            disconnected = true
-            if localConnection then
-                Teardown.teardown(localConnection :: any)
-            end
-        end
+        reliableRemote.OnClientEvent:Connect(receiveData) :: any,
+        if self._race
+            then unreliableRemote.OnClientEvent:Connect(
+                function(timeStamp: number, channelName: string, data: unknown)
+                    receiveData(timeStamp, channelName, data)
+                    unreliableRemote:FireServer(channelName, timeStamp)
+                end
+            ) :: any
+            else nil
     )
 end
 
 function ClientReplication:bind<T>(name: string, fn: Fn<T>): () -> ()
     local self: Private & ClientReplication = self :: any
 
-    local connectionsForName = self._connections[name]
-    if connectionsForName == nil then
-        connectionsForName = {}
-        self._connections[name] = connectionsForName
-    end
-    table.insert(connectionsForName, fn)
-
-    local disconnected = false
-    local function disconnect()
-        if disconnected then
-            if _G.DEV then
-                error('attempt to disconnect signal twice')
-            end
-            return
-        end
-        local index = table.find(connectionsForName, fn)
-        if index then
-            table.remove(connectionsForName, index)
-        end
+    local signal = self._channelSignals[name]
+    if signal == nil then
+        signal = Signal.new()
+        self._channelSignals[name] = signal
     end
 
-    local globalContainer = self._globalContainer
-    local globalCounterContainer = self._globalCounterContainer
-    local localContainer = self._localContainer
-    local localCounterContainer = self._localCounterContainer
+    local disconnect = signal:connect(fn :: any):disconnectOnceFn()
 
-    if globalContainer and globalCounterContainer then
-        local currentValue = if localCounterContainer
-                and localContainer
-                and localCounterContainer:GetAttribute(name) ~= nil
-            then {
-                value = readValue(localContainer, name),
-            }
-            elseif globalCounterContainer:GetAttribute(name) ~= nil then {
-                value = readValue(globalContainer, name),
-            }
-            else nil
-
-        if currentValue then
-            task.spawn(fn, currentValue.value)
-        end
+    if self._lastTimeStamps[name] ~= nil then
+        task.spawn(fn, self._lastData[name] :: any)
     end
 
     return disconnect
