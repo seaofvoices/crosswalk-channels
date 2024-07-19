@@ -1,4 +1,5 @@
 local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
 
 local Teardown = require('@pkg/luau-teardown')
 
@@ -29,7 +30,7 @@ type Private = {
     _unreliableRemote: UnreliableRemoteEvent?,
     _registeredPlayers: { [Player]: true? },
 
-    _latestTimeStamp: { [Player]: { [string]: number } },
+    _latestTimeStampSent: { [Player]: { [string]: number } },
     _latestData: ChannelData,
     _latestLocalData: { [Player]: ChannelData },
     _submitChannelData: { SubmitChannelTask },
@@ -41,6 +42,7 @@ type Private = {
         channelName: string,
         data: unknown
     ) -> (),
+    _flushData: (self: ServerReplication) -> (),
     _validateSetup: (self: ServerReplication) -> (),
     _validateChannelName: (self: ServerReplication, channelName: string) -> (),
 }
@@ -74,7 +76,7 @@ function ServerReplication.new(options: ServerReplicationOptions?): ServerReplic
         _remote = nil,
         _unreliableRemote = nil,
         _registeredPlayers = {},
-        _latestTimeStamp = setmetatable({}, { __mode = 'k' }) :: any,
+        _latestTimeStampSent = setmetatable({}, { __mode = 'k' }) :: any,
         _latestData = {},
         _latestLocalData = setmetatable({}, { __mode = 'k' }) :: any,
 
@@ -85,6 +87,7 @@ function ServerReplication.new(options: ServerReplicationOptions?): ServerReplic
         _sendData = nil :: any,
         _validateChannelName = nil :: any,
         _validateSetup = nil :: any,
+        _flushData = nil :: any,
     }
 
     return setmetatable(self, ServerReplicationMetatable) :: any
@@ -105,34 +108,6 @@ function ServerReplication:setup(parent: Instance): () -> ()
     self._unreliableRemote = unreliableRemote
 
     if self._race then
-        local function submitData()
-            local queue = self._submitChannelData
-            self._submitChannelData = {}
-
-            for i = #queue, 1, -1 do
-                local submitInfo = queue[i]
-
-                for _, player in submitInfo.players do
-                    if self._registeredPlayers[player] then
-                        local latestReceived = (self._latestReceived[player] or {} :: any)[submitInfo.channel]
-                        local latestTimeStamp = (self._latestTimeStamp[player] or {} :: any)[submitInfo.channel]
-
-                        if
-                            (latestReceived or 0) < submitInfo.time and latestTimeStamp == nil
-                            or latestTimeStamp == submitInfo.time
-                        then
-                            remote:FireClient(
-                                player,
-                                submitInfo.time,
-                                submitInfo.channel,
-                                submitInfo.data
-                            )
-                        end
-                    end
-                end
-            end
-        end
-
         local function onDataReceived(player: Player, channel: string, timeStamp: number)
             if
                 type(channel) ~= 'string'
@@ -157,14 +132,16 @@ function ServerReplication:setup(parent: Instance): () -> ()
             task.spawn(function()
                 while true do
                     task.wait(self._syncInterval)
-                    submitData()
+                    self:_flushData()
                 end
             end) :: any,
             unreliableRemote.OnServerEvent:Connect(onDataReceived) :: any
         )
+    else
+        return Teardown.fn(RunService.Heartbeat:Connect(function(step: number)
+            self:_flushData()
+        end) :: any)
     end
-
-    return Teardown.fn()
 end
 
 function ServerReplication:registerPlayer(player: Player)
@@ -186,7 +163,7 @@ end
 function ServerReplication:unregisterPlayer(player: Player)
     local self: Private & ServerReplication = self :: any
 
-    self._latestTimeStamp[player] = nil
+    self._latestTimeStampSent[player] = nil
     self._registeredPlayers[player] = nil
     self._latestLocalData[player] = nil
     self._latestReceived[player] = nil
@@ -229,15 +206,14 @@ function ServerReplication:_sendData(players: { Player }, channelName: string, d
     local self: Private & ServerReplication = self :: any
 
     local unreliableRemote = self._unreliableRemote :: UnreliableRemoteEvent
-    local remote = self._remote :: RemoteEvent
 
     local currentTime = self._timeFn()
 
     for _, player in players do
-        local latestTimeStamps = self._latestTimeStamp[player]
+        local latestTimeStamps = self._latestTimeStampSent[player]
         if latestTimeStamps == nil then
             latestTimeStamps = {}
-            self._latestTimeStamp[player] = latestTimeStamps
+            self._latestTimeStampSent[player] = latestTimeStamps
         end
         latestTimeStamps[channelName] = currentTime
     end
@@ -246,17 +222,50 @@ function ServerReplication:_sendData(players: { Player }, channelName: string, d
         for _, player in players do
             unreliableRemote:FireClient(player, currentTime, channelName, data)
         end
+    end
 
-        local submitTask: SubmitChannelTask = {
-            players = players,
-            channel = channelName,
-            time = currentTime,
-            data = data,
-        }
-        table.insert(self._submitChannelData, submitTask)
-    else
-        for _, player in players do
-            remote:FireClient(player, currentTime, channelName, data)
+    local submitTask: SubmitChannelTask = {
+        players = players,
+        channel = channelName,
+        time = currentTime,
+        data = data,
+    }
+    table.insert(self._submitChannelData, submitTask)
+end
+
+function ServerReplication:_flushData()
+    local self: Private & ServerReplication = self :: any
+
+    if _G.DEV then
+        self:_validateSetup()
+    end
+
+    local remote = self._remote :: RemoteEvent
+
+    local queue = self._submitChannelData
+    self._submitChannelData = {}
+
+    for i = #queue, 1, -1 do
+        local submitInfo = queue[i]
+        local channelName = submitInfo.channel
+        local submitTime = submitInfo.time
+
+        for _, player in submitInfo.players do
+            local receivedStamps = self._latestReceived[player]
+
+            if self._registeredPlayers[player] then
+                local latestReceived: number? = (receivedStamps or {} :: { [string]: number })[channelName]
+
+                if (latestReceived or 0) < submitTime then
+                    if receivedStamps == nil then
+                        receivedStamps = {}
+                        self._latestReceived[player] = receivedStamps
+                    end
+                    receivedStamps[channelName] = submitTime
+
+                    remote:FireClient(player, submitTime, channelName, submitInfo.data)
+                end
+            end
         end
     end
 end
