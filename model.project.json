@@ -3,9 +3,12 @@
   "tree": {
     "$path": "./channels.lua",
     "impl": {
-      "$path": "./src",
-      "__modules__": {
-        "$path": "./node_modules"
+      "$className": "Folder",
+      "src": {
+        "$path": "src"
+      },
+      "node_modules": {
+        "$path": "node_modules"
       }
     }
   }

@@ -5,13 +5,8 @@ set -e
 DARKLUA_CONFIG=$1
 BUILD_OUTPUT=$2
 
-if [ ! -d node_modules ]; then
-    rm -rf temp
-    yarn install
-fi
-if [ ! -d node_modules/.luau-aliases ]; then
-    yarn run prepare
-fi
+yarn workspaces focus --production
+yarn dlx npmluau
 
 rm -rf temp
 mkdir -p temp
