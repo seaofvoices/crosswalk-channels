@@ -23,7 +23,7 @@ return function(_SharedModules, Services, isServer)
         setmetatable(lastLocalValues :: any, { __mode = 'k' })
 
         function module.configure(config: Configuration)
-            serverReplication = ServerReplication.new(config)
+            serverReplication:setOptions(config)
         end
 
         function module.Start()
@@ -132,7 +132,7 @@ return function(_SharedModules, Services, isServer)
         local clientReplication = ClientReplication.new()
 
         function module.configure(config: Configuration)
-            clientReplication = ClientReplication.new(config)
+            clientReplication:setOptions(config)
         end
 
         function module.Start()

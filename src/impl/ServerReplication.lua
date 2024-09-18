@@ -7,6 +7,7 @@ local Constants = require('./Constants')
 local matchAttributeName = require('./matchAttributeName')
 
 export type ServerReplication = {
+    setOptions: (self: ServerReplication, config: ServerReplicationOptions) -> (),
     setup: (self: ServerReplication, parent: Instance) -> () -> (),
     registerPlayer: (self: ServerReplication, player: Player) -> (),
     unregisterPlayer: (self: ServerReplication, player: Player) -> (),
@@ -35,6 +36,7 @@ type Private = {
     _latestLocalData: { [Player]: ChannelData },
     _submitChannelData: { SubmitChannelTask },
     _latestReceived: { [Player]: { [string]: number } },
+    _unreliableScheduledPayload: { [Player]: { [string]: { any } } },
 
     _sendData: (
         self: ServerReplication,
@@ -43,6 +45,7 @@ type Private = {
         data: unknown
     ) -> (),
     _flushData: (self: ServerReplication) -> (),
+    _unreliableFlushData: (self: ServerReplication) -> (),
     _validateSetup: (self: ServerReplication) -> (),
     _validateChannelName: (self: ServerReplication, channelName: string) -> (),
 }
@@ -79,6 +82,7 @@ function ServerReplication.new(options: ServerReplicationOptions?): ServerReplic
         _latestTimeStampSent = setmetatable({}, { __mode = 'k' }) :: any,
         _latestData = {},
         _latestLocalData = setmetatable({}, { __mode = 'k' }) :: any,
+        _unreliableScheduledPayload = {},
 
         _submitChannelData = {},
         _latestReceived = {},
@@ -88,9 +92,31 @@ function ServerReplication.new(options: ServerReplicationOptions?): ServerReplic
         _validateChannelName = nil :: any,
         _validateSetup = nil :: any,
         _flushData = nil :: any,
+        _unreliableFlushData = nil :: any,
     }
 
     return setmetatable(self, ServerReplicationMetatable) :: any
+end
+
+function ServerReplication:setOptions(options: ServerReplicationOptions)
+    local self: Private & ServerReplication = self :: any
+
+    if self._remote ~= nil or self._unreliableRemote ~= nil then
+        if _G.DEV then
+            error('unable to update options after ServerReplication is setup')
+        end
+        return
+    end
+
+    if options.race ~= nil then
+        self._race = options.race
+    end
+    if options.syncInterval then
+        self._syncInterval = options.syncInterval
+    end
+    if options.timeFn ~= nil then
+        self._timeFn = options.timeFn
+    end
 end
 
 function ServerReplication:setup(parent: Instance): () -> ()
@@ -135,6 +161,9 @@ function ServerReplication:setup(parent: Instance): () -> ()
                     self:_flushData()
                 end
             end) :: any,
+            RunService.Heartbeat:Connect(function(step: number)
+                self:_unreliableFlushData()
+            end) :: any,
             unreliableRemote.OnServerEvent:Connect(onDataReceived) :: any
         )
     else
@@ -167,6 +196,7 @@ function ServerReplication:unregisterPlayer(player: Player)
     self._registeredPlayers[player] = nil
     self._latestLocalData[player] = nil
     self._latestReceived[player] = nil
+    self._unreliableScheduledPayload[player] = nil
 end
 
 function ServerReplication:send(name: string, value: unknown)
@@ -205,8 +235,6 @@ end
 function ServerReplication:_sendData(players: { Player }, channelName: string, data: unknown)
     local self: Private & ServerReplication = self :: any
 
-    local unreliableRemote = self._unreliableRemote :: UnreliableRemoteEvent
-
     local currentTime = self._timeFn()
 
     for _, player in players do
@@ -220,7 +248,14 @@ function ServerReplication:_sendData(players: { Player }, channelName: string, d
 
     if self._race then
         for _, player in players do
-            unreliableRemote:FireClient(player, currentTime, channelName, data)
+            -- unreliableRemote:FireClient(player, currentTime, channelName, data)
+            local requests = self._unreliableScheduledPayload[player]
+            if requests == nil then
+                requests = {}
+                self._unreliableScheduledPayload[player] = requests
+            end
+
+            requests[channelName] = { currentTime, data }
         end
     end
 
@@ -245,6 +280,8 @@ function ServerReplication:_flushData()
     local queue = self._submitChannelData
     self._submitChannelData = {}
 
+    local requests = {}
+
     for i = #queue, 1, -1 do
         local submitInfo = queue[i]
         local channelName = submitInfo.channel
@@ -263,9 +300,40 @@ function ServerReplication:_flushData()
                     end
                     receivedStamps[channelName] = submitTime
 
-                    remote:FireClient(player, submitTime, channelName, submitInfo.data)
+                    local payload = { submitTime :: any, channelName, submitInfo.data }
+                    if requests[player] == nil then
+                        requests[player] = { payload }
+                    else
+                        table.insert(requests[player], payload)
+                    end
                 end
             end
+        end
+    end
+
+    for player, payloads in requests do
+        remote:FireClient(player, payloads)
+    end
+end
+
+function ServerReplication:_unreliableFlushData()
+    local self: Private & ServerReplication = self :: any
+
+    if _G.DEV then
+        self:_validateSetup()
+    end
+    if not self._race then
+        return
+    end
+
+    local unreliableScheduledPayload = self._unreliableScheduledPayload
+    self._unreliableScheduledPayload = {}
+
+    local remote = self._unreliableRemote :: UnreliableRemoteEvent
+
+    for player, channelData in unreliableScheduledPayload do
+        for channelName, payload in channelData do
+            remote:FireClient(player, channelName, payload[1], payload[2])
         end
     end
 end
