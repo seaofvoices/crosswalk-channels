@@ -333,7 +333,7 @@ function ServerReplication:_unreliableFlushData()
 
     for player, channelData in unreliableScheduledPayload do
         for channelName, payload in channelData do
-            remote:FireClient(player, channelName, payload[1], payload[2])
+            remote:FireClient(player, payload[1], channelName, payload[2])
         end
     end
 end
