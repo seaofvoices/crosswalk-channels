@@ -150,6 +150,7 @@ function ServerReplication:setup(parent: Instance): () -> ()
             unreliableRemote.Parent = parent
             self._unreliableRemote = unreliableRemote
         end
+        local unreliableRemote = self._unreliableRemote :: UnreliableRemoteEvent
 
         local function onDataReceived(player: Player, channel: string, timeStamp: number)
             if
@@ -178,10 +179,10 @@ function ServerReplication:setup(parent: Instance): () -> ()
                     self:_flushData()
                 end
             end) :: any,
-            self._flushSignal:Connect(function(step: number)
+            self._flushSignal:Connect(function(_step: number)
                 self:_unreliableFlushData()
             end) :: any,
-            self._unreliableRemote.OnServerEvent:Connect(onDataReceived) :: any
+            unreliableRemote.OnServerEvent:Connect(onDataReceived) :: any
         )
     else
         return Teardown.fn(self._flushSignal:Connect(function(step: number)

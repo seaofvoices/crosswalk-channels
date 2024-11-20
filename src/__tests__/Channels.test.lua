@@ -36,7 +36,7 @@ local function mockServices(remote, unreliableRemote)
     playerInstanceMock.Parent = players
     return {
         ReplicatedStorage = mockInstance({
-            WaitForChild = function(self, name)
+            WaitForChild = function(_self, name)
                 if name == Constants.EventName then
                     return remote
                 elseif name == Constants.FastEventName then

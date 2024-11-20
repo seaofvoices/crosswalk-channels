@@ -66,7 +66,7 @@ function ClientReplication:setOptions(options: ClientReplicationOptions)
     end
 end
 
-function ClientReplication:setup(parent: Instance, player: Player): Teardown
+function ClientReplication:setup(parent: Instance, _player: Player): Teardown
     local self: Private & ClientReplication = self :: any
 
     if self._isSetup then
