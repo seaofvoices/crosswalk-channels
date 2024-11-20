@@ -185,7 +185,7 @@ function ServerReplication:setup(parent: Instance): () -> ()
             unreliableRemote.OnServerEvent:Connect(onDataReceived) :: any
         )
     else
-        return Teardown.fn(self._flushSignal:Connect(function(step: number)
+        return Teardown.fn(self._flushSignal:Connect(function(_step: number)
             self:_flushData()
         end) :: any)
     end
