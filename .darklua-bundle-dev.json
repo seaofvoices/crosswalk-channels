@@ -5,7 +5,8 @@
       "sources": {
         "@pkg": "node_modules/.luau-aliases"
       }
-    }
+    },
+    "excludes": ["@lune/**"]
   },
   "rules": [
     "remove_types",

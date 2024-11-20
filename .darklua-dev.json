@@ -1,7 +1,5 @@
 {
   "rules": [
-    "remove_comments",
-    "remove_spaces",
     {
       "rule": "convert_require",
       "current": {

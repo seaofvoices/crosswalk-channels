@@ -2,6 +2,8 @@
 
 ## Unreleased Changes
 
+- rewrite data syncing logic ([#15](https://github.com/seaofvoices/crosswalk-channels/pull/15))
+
 ## 0.1.3
 
 - fix data sync issues with arrays ([#11](https://github.com/seaofvoices/crosswalk-channels/pull/11))
