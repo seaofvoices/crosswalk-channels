@@ -2,6 +2,7 @@ local Signal = require('@pkg/luau-signal')
 local Teardown = require('@pkg/luau-teardown')
 
 local Constants = require('./Constants')
+local waitForeverForChild = require('./waitForeverForChild')
 
 type Signal<T...> = Signal.Signal<T...>
 type Teardown = Teardown.Teardown
@@ -92,8 +93,9 @@ function ClientReplication:setup(parent: Instance, _player: Player): Teardown
         end
     end
 
-    local unreliableRemote = parent:WaitForChild(Constants.FastEventName) :: UnreliableRemoteEvent
-    local reliableRemote = parent:WaitForChild(Constants.EventName) :: RemoteEvent
+    local unreliableRemote =
+        waitForeverForChild(parent, Constants.FastEventName) :: UnreliableRemoteEvent
+    local reliableRemote = waitForeverForChild(parent, Constants.EventName) :: RemoteEvent
 
     return Teardown.join(
         function()
