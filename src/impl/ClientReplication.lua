@@ -2,6 +2,7 @@ local Signal = require('@pkg/luau-signal')
 local Teardown = require('@pkg/luau-teardown')
 
 local Constants = require('./Constants')
+local compareData = require('./compareData')
 local waitForeverForChild = require('./waitForeverForChild')
 
 type Signal<T...> = Signal.Signal<T...>
@@ -13,21 +14,26 @@ export type ClientReplication = {
     setOptions: (self: ClientReplication, options: ClientReplicationOptions) -> (),
     setup: (self: ClientReplication, parent: Instance, player: Player) -> (),
     bind: <T>(self: ClientReplication, name: string, fn: Fn<T>) -> () -> (),
+    override: <T>(self: ClientReplication, name: string, value: T, expiration: number?) -> (),
 }
 
 type Private = {
     _isSetup: boolean,
     _race: boolean,
+    _defaultExpiration: number,
     _channelSignals: { [string]: Signal<unknown> },
     _lastTimeStamps: { [string]: number },
     _lastData: { [string]: unknown },
+    _overrides: { [string]: { remainingLife: number, value: unknown } },
 }
 
 export type ClientReplicationOptions = {
     race: boolean?,
+    defaultExpiration: number?,
 }
 
 local DEFAULT_RACE_OPTIONS = false
+local DEFAULT_EXPIRATION = 1.5
 
 type ClientReplicationStatic = ClientReplication & Private & {
     new: (options: ClientReplicationOptions?) -> ClientReplication,
@@ -44,9 +50,11 @@ function ClientReplication.new(options: ClientReplicationOptions?): ClientReplic
     local self: Private = {
         _isSetup = false,
         _race = if options.race == nil then DEFAULT_RACE_OPTIONS else options.race,
+        _defaultExpiration = options.defaultExpiration or DEFAULT_EXPIRATION,
         _channelSignals = {},
         _lastTimeStamps = {},
         _lastData = {},
+        _overrides = {},
     }
 
     return setmetatable(self, ClientReplicationMetatable) :: any
@@ -80,6 +88,17 @@ function ClientReplication:setup(parent: Instance, _player: Player): Teardown
 
     local function receiveData(timeStamp: number, channelName: string, data: unknown)
         if timeStamp <= (self._lastTimeStamps[channelName] or 0) then
+            return
+        end
+
+        local override = self._overrides[channelName]
+        self._overrides[channelName] = nil
+
+        if override ~= nil and compareData(override.value, data) then
+            return
+        end
+
+        if compareData(self._lastData[channelName], data) then
             return
         end
 
@@ -133,6 +152,25 @@ function ClientReplication:bind<T>(name: string, fn: Fn<T>): () -> ()
     end
 
     return disconnect
+end
+
+function ClientReplication:override<T>(name: string, value: T, expiration: number?)
+    local self: Private & ClientReplication = self :: any
+
+    local override = { remainingLife = expiration or self._defaultExpiration, value = value }
+
+    self._overrides[name] = override
+
+    task.delay(expiration, function()
+        if self._overrides[name] == override then
+            self._overrides[name] = nil
+
+            local signal = self._channelSignals[name]
+            if signal then
+                signal:fire(self._lastData[name])
+            end
+        end
+    end)
 end
 
 return ClientReplication
