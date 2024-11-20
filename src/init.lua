@@ -23,13 +23,17 @@ return function(_SharedModules, Services, isServer)
         setmetatable(lastLocalValues :: any, { __mode = 'k' })
 
         function module.configure(config: Configuration)
-            serverReplication:setOptions(config)
+            serverReplication:setOptions(config :: any)
         end
 
         function module.Start()
             serverReplication:setup(Services.ReplicatedStorage)
 
             local players: Players = Services.Players
+
+            for _, player in players:GetPlayers() do
+                serverReplication:registerPlayer(player)
+            end
 
             players.PlayerAdded:Connect(function(player: Player)
                 serverReplication:registerPlayer(player)

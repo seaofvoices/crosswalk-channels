@@ -7,26 +7,19 @@ local afterEach = jestGlobals.afterEach
 local beforeEach = jestGlobals.beforeEach
 
 local ChannelsBuilder = require('..')
+local Constants = require('../impl/Constants')
+local mockInstance = require('./mockInstance')
 
-local function mockInstance<T>(tableValue, fallbackInstance): T
-    return setmetatable(tableValue, {
-        __index = function(_, index)
-            local result = (fallbackInstance :: any)[index]
-            if type(result) == 'function' then
-                return function(_self, ...)
-                    return result(fallbackInstance, ...)
-                end
-            else
-                return result
-            end
+local function mockEvent()
+    local bindable = Instance.new('BindableEvent')
+    return mockInstance({
+        Fire = function(_self, ...)
+            bindable:Fire(...)
         end,
-        __newindex = function(_, index, value)
-            fallbackInstance[index] = value
-        end,
-    }) :: any
+    }, bindable.Event)
 end
 
-local function mockServices()
+local function mockServices(remote, unreliableRemote)
     local playerGuiMock = Instance.new('Folder')
     playerGuiMock.Name = 'PlayerGui'
     local playerInstanceMock = Instance.new('Folder')
@@ -42,8 +35,24 @@ local function mockServices()
     playerGuiMock.Parent = playerInstanceMock
     playerInstanceMock.Parent = players
     return {
-        ReplicatedStorage = Instance.new('Folder') :: Instance,
-        Players = mockInstance({ LocalPlayer = player }, players),
+        ReplicatedStorage = mockInstance({
+            WaitForChild = function(self, name)
+                if name == Constants.EventName then
+                    return remote
+                elseif name == Constants.FastEventName then
+                    return unreliableRemote
+                end
+                error(`unable to find child {name}`)
+            end,
+        }, Instance.new('Folder')),
+        Players = mockInstance({
+            LocalPlayer = player,
+            PlayerAdded = mockEvent(),
+            PlayerRemoving = mockEvent(),
+            GetPlayers = function()
+                return { player }
+            end,
+        }, players),
     }
 end
 
@@ -108,12 +117,34 @@ for caseName, value in valueCases do
                 local services
                 local serverChannels
                 local clientChannels
+                local flushSignal
+                local remoteMock
+                local unreliableRemoteMock
 
                 local channelName = 'one'
 
                 beforeEach(function()
-                    services = mockServices()
+                    flushSignal = mockEvent()
+                    local newRemoteMock = {
+                        FireClient = jest.fn(function(self, _player, ...)
+                            self.OnClientEvent:Fire(...)
+                        end),
+                        OnClientEvent = mockEvent(),
+                    }
+                    local newUnreliableRemoteMock = {
+                        FireClient = jest.fn(function(self, ...)
+                            self.OnClientEvent:Fire(...)
+                        end),
+                        OnClientEvent = mockEvent(),
+                    }
+                    unreliableRemoteMock = newUnreliableRemoteMock
+                    remoteMock = newRemoteMock
+                    services = mockServices(remoteMock, unreliableRemoteMock)
                     serverChannels = ChannelsBuilder({}, services, true)
+                    serverChannels.configure({
+                        flushSignal = flushSignal,
+                        remote = remoteMock,
+                    })
                     clientChannels = ChannelsBuilder({}, services, false)
                 end)
 
@@ -135,13 +166,14 @@ for caseName, value in valueCases do
                     it(
                         'sends the value, initializes the player, bind to channel and the value is received',
                         function()
-                            serverChannels.Init()
+                            serverChannels.Start()
                             serverChannels.Send(channelName, value)
-                            clientChannels.Init()
+                            clientChannels.Start()
 
                             local fn, fnFunction = jest.fn()
                             teardown = bindToChannel(channelName, fnFunction)
 
+                            flushSignal:Fire(0.02)
                             task.wait()
 
                             expect(fn).toHaveBeenCalledTimes(1)
@@ -152,14 +184,15 @@ for caseName, value in valueCases do
                     it(
                         'initializes the player, bind to channel, sends the value and the value is received',
                         function()
-                            serverChannels.Init()
-                            clientChannels.Init()
+                            serverChannels.Start()
+                            clientChannels.Start()
 
                             local fn, fnFunction = jest.fn()
                             teardown = bindToChannel(channelName, fnFunction)
 
                             serverChannels.Send(channelName, value)
 
+                            flushSignal:Fire(0.02)
                             task.wait()
 
                             expect(fn).toHaveBeenCalledTimes(1)
@@ -170,14 +203,15 @@ for caseName, value in valueCases do
                     it(
                         'initializes the player, sends the value, bind to channel, and the value is received',
                         function()
-                            serverChannels.Init()
-                            clientChannels.Init()
+                            serverChannels.Start()
+                            clientChannels.Start()
 
                             serverChannels.Send(channelName, value)
                             local fn, fnFunction = jest.fn()
 
                             teardown = bindToChannel(channelName, fnFunction)
 
+                            flushSignal:Fire(0.02)
                             task.wait()
 
                             expect(fn).toHaveBeenCalledTimes(1)
@@ -207,17 +241,18 @@ for caseName, value in valueCases do
                     it(
                         'sends the value, initializes the player, bind to channel and the value is received',
                         function()
-                            serverChannels.Init()
+                            serverChannels.Start()
                             serverChannels.SendLocal(
                                 services.Players.LocalPlayer,
                                 channelName,
                                 value
                             )
-                            clientChannels.Init()
+                            clientChannels.Start()
 
                             local fn, fnFunction = jest.fn()
                             teardown = bindToChannel(channelName, fnFunction)
 
+                            flushSignal:Fire(0.02)
                             task.wait()
 
                             expect(fn).toHaveBeenCalledTimes(1)
@@ -228,8 +263,8 @@ for caseName, value in valueCases do
                     it(
                         'initializes the player, bind to channel, sends the value and the value is received',
                         function()
-                            serverChannels.Init()
-                            clientChannels.Init()
+                            serverChannels.Start()
+                            clientChannels.Start()
 
                             local fn, fnFunction = jest.fn()
                             teardown = bindToChannel(channelName, fnFunction)
@@ -239,6 +274,7 @@ for caseName, value in valueCases do
                                 channelName,
                                 value
                             )
+                            flushSignal:Fire(0.02)
 
                             task.wait()
 
@@ -250,14 +286,16 @@ for caseName, value in valueCases do
                     it(
                         'initializes the player, sends the value, bind to channel, and the value is received',
                         function()
-                            serverChannels.Init()
-                            clientChannels.Init()
+                            serverChannels.Start()
+                            clientChannels.Start()
 
                             serverChannels.SendLocal(
                                 services.Players.LocalPlayer,
                                 channelName,
                                 value
                             )
+                            flushSignal:Fire(0.02)
+
                             local fn, fnFunction = jest.fn()
 
                             teardown = bindToChannel(channelName, fnFunction)

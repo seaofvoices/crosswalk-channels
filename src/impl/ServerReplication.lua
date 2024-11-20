@@ -1,4 +1,3 @@
-local Players = game:GetService('Players')
 local RunService = game:GetService('RunService')
 
 local Teardown = require('@pkg/luau-teardown')
@@ -30,6 +29,7 @@ type Private = {
     _remote: RemoteEvent?,
     _unreliableRemote: UnreliableRemoteEvent?,
     _registeredPlayers: { [Player]: true? },
+    _flushSignal: RBXScriptSignal,
 
     _latestTimeStampSent: { [Player]: { [string]: number } },
     _latestData: ChannelData,
@@ -54,11 +54,15 @@ export type ServerReplicationOptions = {
     race: boolean?,
     syncInterval: number?,
     timeFn: (() -> number)?,
+    flushSignal: RBXScriptSignal?,
+    remote: RemoteEvent?,
+    unreliableRemote: UnreliableRemoteEvent?,
 }
 
 local DEFAULT_RACE_OPTIONS = false
 local DEFAULT_SYNC_INTERVAL = 0.5
-local DEFAULT_TIME_FUNCTION = time
+local DEFAULT_TIME_FUNCTION = os.clock
+local DEFAULT_FLUSH_SIGNAL = RunService.Heartbeat
 
 type ServerReplicationStatic = ServerReplication & Private & {
     new: (options: ServerReplicationOptions?) -> ServerReplication,
@@ -76,13 +80,14 @@ function ServerReplication.new(options: ServerReplicationOptions?): ServerReplic
         _race = if options.race ~= nil then options.race else DEFAULT_RACE_OPTIONS,
         _syncInterval = options.syncInterval or DEFAULT_SYNC_INTERVAL,
         _timeFn = options.timeFn or DEFAULT_TIME_FUNCTION,
-        _remote = nil,
-        _unreliableRemote = nil,
+        _remote = options.remote,
+        _unreliableRemote = options.unreliableRemote,
         _registeredPlayers = {},
         _latestTimeStampSent = setmetatable({}, { __mode = 'k' }) :: any,
         _latestData = {},
         _latestLocalData = setmetatable({}, { __mode = 'k' }) :: any,
         _unreliableScheduledPayload = {},
+        _flushSignal = options.flushSignal or DEFAULT_FLUSH_SIGNAL,
 
         _submitChannelData = {},
         _latestReceived = {},
@@ -117,23 +122,35 @@ function ServerReplication:setOptions(options: ServerReplicationOptions)
     if options.timeFn ~= nil then
         self._timeFn = options.timeFn
     end
+    if options.flushSignal ~= nil then
+        self._flushSignal = options.flushSignal
+    end
+    if options.remote ~= nil then
+        self._remote = options.remote
+    end
+    if options.unreliableRemote ~= nil then
+        self._unreliableRemote = options.unreliableRemote
+    end
 end
 
 function ServerReplication:setup(parent: Instance): () -> ()
     local self: Private & ServerReplication = self :: any
 
-    local remote = Instance.new('RemoteEvent')
-    remote.Name = Constants.EventName
-    remote.Parent = parent
-
-    local unreliableRemote = Instance.new('UnreliableRemoteEvent')
-    unreliableRemote.Name = Constants.FastEventName
-    unreliableRemote.Parent = parent
-
-    self._remote = remote
-    self._unreliableRemote = unreliableRemote
+    if self._remote == nil then
+        local remote = Instance.new('RemoteEvent')
+        remote.Name = Constants.EventName
+        remote.Parent = parent
+        self._remote = remote
+    end
 
     if self._race then
+        if self._unreliableRemote == nil then
+            local unreliableRemote = Instance.new('UnreliableRemoteEvent')
+            unreliableRemote.Name = Constants.FastEventName
+            unreliableRemote.Parent = parent
+            self._unreliableRemote = unreliableRemote
+        end
+
         local function onDataReceived(player: Player, channel: string, timeStamp: number)
             if
                 type(channel) ~= 'string'
@@ -161,13 +178,13 @@ function ServerReplication:setup(parent: Instance): () -> ()
                     self:_flushData()
                 end
             end) :: any,
-            RunService.Heartbeat:Connect(function(step: number)
+            self._flushSignal:Connect(function(step: number)
                 self:_unreliableFlushData()
             end) :: any,
-            unreliableRemote.OnServerEvent:Connect(onDataReceived) :: any
+            self._unreliableRemote.OnServerEvent:Connect(onDataReceived) :: any
         )
     else
-        return Teardown.fn(RunService.Heartbeat:Connect(function(step: number)
+        return Teardown.fn(self._flushSignal:Connect(function(step: number)
             self:_flushData()
         end) :: any)
     end
@@ -175,6 +192,10 @@ end
 
 function ServerReplication:registerPlayer(player: Player)
     local self: Private & ServerReplication = self :: any
+
+    if self._registeredPlayers[player] then
+        return
+    end
 
     self._registeredPlayers[player] = true
 
@@ -209,7 +230,12 @@ function ServerReplication:send(name: string, value: unknown)
 
     self._latestData[name] = { value = value }
 
-    self:_sendData(Players:GetPlayers(), name, value)
+    local players = {}
+    for player in self._registeredPlayers do
+        table.insert(players, player)
+    end
+
+    self:_sendData(players, name, value)
 end
 
 function ServerReplication:sendLocal(player: Player, name: string, value: unknown)
@@ -248,7 +274,6 @@ function ServerReplication:_sendData(players: { Player }, channelName: string, d
 
     if self._race then
         for _, player in players do
-            -- unreliableRemote:FireClient(player, currentTime, channelName, data)
             local requests = self._unreliableScheduledPayload[player]
             if requests == nil then
                 requests = {}
@@ -312,7 +337,9 @@ function ServerReplication:_flushData()
     end
 
     for player, payloads in requests do
-        remote:FireClient(player, payloads)
+        if #payloads ~= 0 then
+            remote:FireClient(player, payloads)
+        end
     end
 end
 
