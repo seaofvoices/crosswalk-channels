@@ -2,6 +2,7 @@
 
 ## Unreleased Changes
 
+- add `override` function to allow clients to push temporary values onto channels ([#16](https://github.com/seaofvoices/crosswalk-channels/pull/16))
 - rewrite data syncing logic ([#15](https://github.com/seaofvoices/crosswalk-channels/pull/15))
 
 ## 0.1.3

@@ -143,13 +143,14 @@ function ServerReplication:setup(parent: Instance): () -> ()
         self._remote = remote
     end
 
+    if self._unreliableRemote == nil then
+        local unreliableRemote = Instance.new('UnreliableRemoteEvent')
+        unreliableRemote.Name = Constants.FastEventName
+        unreliableRemote.Parent = parent
+        self._unreliableRemote = unreliableRemote
+    end
+
     if self._race then
-        if self._unreliableRemote == nil then
-            local unreliableRemote = Instance.new('UnreliableRemoteEvent')
-            unreliableRemote.Name = Constants.FastEventName
-            unreliableRemote.Parent = parent
-            self._unreliableRemote = unreliableRemote
-        end
         local unreliableRemote = self._unreliableRemote :: UnreliableRemoteEvent
 
         local function onDataReceived(player: Player, channel: string, timeStamp: number)
