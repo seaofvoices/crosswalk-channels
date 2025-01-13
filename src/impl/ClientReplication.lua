@@ -161,6 +161,11 @@ function ClientReplication:override<T>(name: string, value: T, expiration: numbe
 
     self._overrides[name] = override
 
+    local signal = self._channelSignals[name]
+    if signal then
+        signal:fire(value)
+    end
+
     task.delay(expiration, function()
         if self._overrides[name] == override then
             self._overrides[name] = nil
