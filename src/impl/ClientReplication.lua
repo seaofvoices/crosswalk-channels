@@ -24,16 +24,26 @@ type Private = {
     _channelSignals: { [string]: Signal<unknown> },
     _lastTimeStamps: { [string]: number },
     _lastData: { [string]: unknown },
-    _overrides: { [string]: { remainingLife: number, value: unknown } },
+    _overrides: {
+        [string]: {
+            lifeTime: number,
+            minimumOverrideTime: number,
+            value: unknown,
+        },
+    },
+    _getMinimumOverrideDuration: () -> number,
+    _timeFn: () -> number,
 }
 
 export type ClientReplicationOptions = {
     race: boolean?,
     defaultExpiration: number?,
+    getMinimumOverrideDuration: (() -> number)?,
 }
 
 local DEFAULT_RACE_OPTIONS = false
 local DEFAULT_EXPIRATION = 1.5
+local DEFAULT_STATIC_MINIMUM_OVERRIDE = 0.1
 
 type ClientReplicationStatic = ClientReplication & Private & {
     new: (options: ClientReplicationOptions?) -> ClientReplication,
@@ -55,6 +65,10 @@ function ClientReplication.new(options: ClientReplicationOptions?): ClientReplic
         _lastTimeStamps = {},
         _lastData = {},
         _overrides = {},
+        _getMinimumOverrideDuration = function()
+            return DEFAULT_STATIC_MINIMUM_OVERRIDE
+        end,
+        _timeFn = os.clock,
     }
 
     return setmetatable(self, ClientReplicationMetatable) :: any
@@ -72,6 +86,12 @@ function ClientReplication:setOptions(options: ClientReplicationOptions)
 
     if options.race ~= nil then
         self._race = options.race
+    end
+    if options.getMinimumOverrideDuration ~= nil then
+        self._getMinimumOverrideDuration = options.getMinimumOverrideDuration
+    end
+    if options.defaultExpiration ~= nil then
+        self._defaultExpiration = options.defaultExpiration
     end
 end
 
@@ -91,19 +111,33 @@ function ClientReplication:setup(parent: Instance, _player: Player): Teardown
             return
         end
 
+        local lastData = self._lastData[channelName]
+        local isEqualToLastData = compareData(lastData, data)
+
+        if not isEqualToLastData then
+            self._lastTimeStamps[channelName] = timeStamp
+            self._lastData[channelName] = data
+        end
+
+        local now = self._timeFn()
+
         local override = self._overrides[channelName]
-        self._overrides[channelName] = nil
 
-        if override ~= nil and compareData(override.value, data) then
+        if override ~= nil then
+            local passedOverrideMinimum = now >= override.minimumOverrideTime
+
+            if passedOverrideMinimum then
+                self._overrides[channelName] = nil
+            end
+
+            if compareData(override.value, data) then
+                return
+            elseif not passedOverrideMinimum then
+                return
+            end
+        elseif isEqualToLastData then
             return
         end
-
-        if compareData(self._lastData[channelName], data) then
-            return
-        end
-
-        self._lastTimeStamps[channelName] = timeStamp
-        self._lastData[channelName] = data
 
         local signal = self._channelSignals[channelName]
 
@@ -157,7 +191,11 @@ end
 function ClientReplication:override<T>(name: string, value: T, expiration: number?)
     local self: Private & ClientReplication = self :: any
 
-    local override = { remainingLife = expiration or self._defaultExpiration, value = value }
+    local override = {
+        lifeTime = expiration or self._defaultExpiration,
+        minimumOverrideTime = self._timeFn() + self._getMinimumOverrideDuration(),
+        value = value,
+    }
 
     self._overrides[name] = override
 
