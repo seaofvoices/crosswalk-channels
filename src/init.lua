@@ -5,6 +5,8 @@ return function(_SharedModules, Services, isServer)
         race: boolean?,
         syncInterval: number?,
         timeFn: (() -> number)?,
+        defaultExpiration: number?,
+        getMinimumOverrideDuration: (() -> number)?,
     }
 
     if isServer then
@@ -133,7 +135,11 @@ return function(_SharedModules, Services, isServer)
     else
         local ClientReplication = require('./impl/ClientReplication')
 
-        local clientReplication = ClientReplication.new()
+        local clientReplication = ClientReplication.new({
+            getMinimumOverrideDuration = function()
+                return Services.Players.LocalPlayer:GetNetworkPing()
+            end,
+        })
 
         function module.configure(config: Configuration)
             clientReplication:setOptions(config)
@@ -156,6 +162,17 @@ return function(_SharedModules, Services, isServer)
             return clientReplication:bind(name, fn)
         end
         module.bind = module.Bind
+
+        function module.override(name: string, value: unknown, lifeTime: number?)
+            if _G.DEV then
+                assert(
+                    type(name) == 'string',
+                    string.format('expected argument #1 to be a string, received %s', type(name))
+                )
+            end
+            clientReplication:override(name, value, lifeTime)
+        end
+        module.Override = module.override
     end
 
     return module
